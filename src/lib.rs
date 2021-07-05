@@ -1,6 +1,38 @@
+//! A small library for creating ELF object files that contain symbols which
+//! refer to arbitrary data.
+//!
+//! This is a specialized utility library focused only on that singular task.
+//! It isn't a generic library for generating ELF files of all sorts, nor does
+//! it support any other object file formats.
+//!
+//! ```
+//! # fn main() -> std::io::Result<()> {
+//! # let buf: Vec<u8> = Vec::new();
+//! # let mut output_file = std::io::Cursor::new(buf);
+//! // Create a new builder, establishing the ELF header values
+//! let mut builder = elfbin::Builder::new(
+//!     elfbin::Header {
+//!         class: elfbin::Class::ELF64,
+//!         encoding: elfbin::Encoding::LSB,
+//!         machine: 64, // x86_64
+//!         flags: 0,
+//!     },
+//!     &mut output_file,
+//! )?;
+//!
+//! // Defile a symbol from any std::io::Read implementation.
+//! builder.add_symbol("example", &b"hello!"[..])?;
+//!
+//! // Close the builder to finalize the ELF metadata.
+//! builder.close()?;
+//! # Ok(())
+//! # }
+//! ```
+
 use binbin::endian::Endian;
 use std::io::{Read, Result, Seek, Write};
 
+/// ELF file class (32-bit or 64-bit).
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(u8)]
 pub enum Class {
@@ -8,6 +40,7 @@ pub enum Class {
     ELF64 = 2,
 }
 
+/// ELF encoding format (little endian or big endian).
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(u8)]
 pub enum Encoding {
@@ -15,13 +48,22 @@ pub enum Encoding {
     MSB = 2,
 }
 
+/// Represents the main ELF header.
 pub struct Header {
+    /// The ELF file class (32-bit or 64-bit).
     pub class: Class,
+
+    /// The data encoding (LSB first or MSB first).
     pub encoding: Encoding,
+
+    /// The target CPU architecture, using values allocated in the ELF documentation.
     pub machine: u16,
+
+    /// Machine-specific file flags.
     pub flags: u32,
 }
 
+/// Represents an ELF file under construction.
 pub struct Builder<W: Write + Seek> {
     w: W,
     class: Class,
@@ -37,6 +79,12 @@ impl<W> Builder<W>
 where
     W: Write + Seek,
 {
+    /// Begin constructing a new ELF file with the given header information
+    /// in the given writer.
+    ///
+    /// The header information also serves to select which specific ELF variant
+    /// the builder will generate, by choosing a [class](Class) and an
+    /// [encoding](Encoding).
     pub fn new(hdr: Header, mut target: W) -> Result<Self> {
         let mut headmap = HeaderMap {
             section_header_offset_field: 0,
@@ -78,6 +126,15 @@ where
         })
     }
 
+    /// Define a new symbol in the output file, using the contents of a given
+    /// reader as the symbol contents.
+    ///
+    /// `add_symbol` will read the given reader to completion and copy all of
+    /// its data into the output file.
+    ///
+    /// `add_symbol` doesn't check if you define the same symbol name more than
+    /// once, but doing so will create a confusing object file that may not
+    /// be accepted by an ELF linker.
     pub fn add_symbol<S: Into<String>, R: Read>(&mut self, name: S, src: R) -> Result<Symbol> {
         let offset = self.current_rodata_offset;
         let length: u64;
@@ -109,6 +166,13 @@ where
         Ok(sym)
     }
 
+    /// Finalizes the ELF metadata in the underlying file and then returns
+    /// that file.
+    ///
+    /// If you don't call `close` then the file will be left in a state where
+    /// it contains any symbol data written previously but it lacks the
+    /// necessary metadata for an ELF linker to find that data, and thus the
+    /// object file will appear to have no symbols at all.
     pub fn close(mut self) -> Result<W> {
         let encoding = self.encoding;
         let class = self.class;
@@ -144,6 +208,7 @@ where
         }?;
         self.w.seek(std::io::SeekFrom::Start(final_pos))?;
 
+        self.w.flush()?;
         Ok(self.w)
     }
 }
@@ -646,6 +711,7 @@ struct TrailerMap {
     section_header_offset: u64,
 }
 
+/// Represents one symbol that's been written already to a [`Builder`].
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Symbol {
     rodata_offset: u64,
