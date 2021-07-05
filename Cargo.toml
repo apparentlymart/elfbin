@@ -1,7 +1,14 @@
 [package]
 name = "elfbin"
 version = "0.1.0"
+keywords = ["elf", "binary", "object", "compiler"]
+categories = ["encoding", "command-line-utilities", "development-tools"]
+authors = ["Martin Atkins <mart@degeneration.co.uk>"]
 edition = "2018"
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/apparentlymart/rust-binbin"
+repository = "https://github.com/apparentlymart/rust-binbin"
 
 [dependencies]
 binbin = "0.2.0"
