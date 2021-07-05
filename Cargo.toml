@@ -1,0 +1,15 @@
+[package]
+name = "elfbin"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+binbin = "0.1.0"
+structopt = "0.3.14"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "elfbin"
+path = "src/bin/main.rs"
