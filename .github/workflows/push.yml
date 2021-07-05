@@ -1,0 +1,53 @@
+name: Check, Test and Build
+on: [push]
+jobs:
+  build:
+    name: Build
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+      - name: Release Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+      - uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.os }}
+          path: |
+            target/release/**
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+      - name: Lint Check
+        uses: actions-rs/clippy-check@v1
+        with:
+          name: Lint Result
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
+      - name: Format Check
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
