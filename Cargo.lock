@@ -24,15 +24,21 @@ dependencies = [
 
 [[package]]
 name = "binbin"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "376b0a9b9e10ca6856f4bfbb71922d87ed6cd6a877c70b9df94bae6c5a4a5a9e"
+checksum = "1343c8f0f3135000e98439db2607991fac7c07d9c1991cb8161e25bcc77b494c"
 
 [[package]]
 name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
+
+[[package]]
+name = "byteorder"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fc10e8cc6b2580fda3f36eb6dc5316657f812a3df879a44a66fc9f0fdbc4855"
 
 [[package]]
 name = "clap"
@@ -50,10 +56,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "elf"
+version = "0.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4841de15dbe0e49b9b62a417589299e3be0d557e0900d36acb87e6dae47197f5"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "elfbin"
 version = "0.1.0"
 dependencies = [
  "binbin",
+ "elf",
  "structopt",
 ]
 
