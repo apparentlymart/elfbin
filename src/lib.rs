@@ -194,7 +194,7 @@ fn write_hdr_64<'a, W: Write + Seek, E: Endian>(
     let header_size_dfr = w.write_deferred(0 as u16)?;
     w.write(0 as u16)?; // no program header entries
     w.write(0 as u16)?; // no program header entries
-    w.write(40 as u16)?; // section header entry size
+    w.write(64 as u16)?; // section header entry size
     w.write(5 as u16)?; // section header entry count
     w.write(1 as u16)?; // section names are in section 1
 
