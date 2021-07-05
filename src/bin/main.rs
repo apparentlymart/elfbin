@@ -10,7 +10,27 @@ use structopt::StructOpt;
 fn main() -> Result<(), Error> {
     let args = CommandLine::from_args();
 
-    println!("args {:#x?}", args);
+    let of = File::create(args.out)?;
+    let mut builder = elfbin::Builder::new(
+        elfbin::Header {
+            class: args.class,
+            encoding: args.encoding,
+            machine: args.machine,
+            flags: args.flags,
+        },
+        of,
+    )?;
+
+    for sym_def in args.symbols {
+        let name = sym_def.symbol_name;
+        let filename = sym_def.filename;
+        let f = File::open(filename)?;
+        builder.add_symbol(name, f)?;
+    }
+
+    let of = builder.close()?;
+    of.sync_all()?;
+
     Ok(())
 }
 
@@ -30,6 +50,9 @@ pub struct CommandLine {
 
     #[structopt(name = "NAME=FILE", help = "Define a symbol")]
     pub symbols: Vec<SymbolDef>,
+
+    #[structopt(short, name = "out", help = "Output filename", required = true)]
+    pub out: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -91,9 +114,13 @@ fn parse_machine(src: &str) -> Result<u16, Error> {
         "386" => Ok(3),
         "68k" => Ok(4),
         "aarch64" => Ok(183),
+        "amd64" => Ok(62),
         "arm" => Ok(40),
         "avr" => Ok(83),
         "riscv" => Ok(243),
+        "x64" => Ok(62),
+        "x86" => Ok(3),
+        "x86_64" => Ok(62),
         _ => {
             if src.starts_with("0x") {
                 match u16::from_str_radix(&src[2..], 16) {
