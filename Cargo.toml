@@ -1,15 +1,15 @@
 [package]
 name = "elfbin"
 description = "Build ELF object files defining symbols with fixed binary data"
-version = "0.1.0"
+version = "0.2.0"
 keywords = ["elf", "binary", "object", "compiler"]
 categories = ["encoding", "command-line-utilities", "development-tools"]
 authors = ["Martin Atkins <mart@degeneration.co.uk>"]
 edition = "2018"
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/apparentlymart/rust-binbin"
-repository = "https://github.com/apparentlymart/rust-binbin"
+homepage = "https://github.com/apparentlymart/elfbin"
+repository = "https://github.com/apparentlymart/elfbin"
 
 [dependencies]
 binbin = "0.2.0"
