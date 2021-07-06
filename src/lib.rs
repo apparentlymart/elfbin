@@ -118,8 +118,8 @@ where
             w: target,
             class: hdr.class,
             encoding: hdr.encoding,
-            headmap: headmap,
-            rodata_pos: rodata_pos,
+            headmap,
+            rodata_pos,
             current_rodata_offset: 0,
             symbols: Vec::new(),
             symbol_names: Vec::new(),
@@ -220,18 +220,18 @@ fn write_hdr_32<'a, W: Write + Seek, E: Endian>(
     write_ident(hdr, w)?;
     w.write(ET_REL)?;
     w.write(hdr.machine)?;
-    w.write(1 as u32)?; // header version
-    w.write(0 as u32)?; // entry point (none)
-    w.write(0 as u32)?; // no program headers
+    w.write(1_u32)?; // header version
+    w.write(0_u32)?; // entry point (none)
+    w.write(0_u32)?; // no program headers
     let shoff_pos = w.position()?;
-    w.write(0 as u32)?; // placeholder for section header offset
+    w.write(0_u32)?; // placeholder for section header offset
     w.write(hdr.flags)?;
-    let header_size_dfr = w.write_deferred(0 as u16)?;
-    w.write(0 as u16)?; // no program header entries
-    w.write(0 as u16)?; // no program header entries
-    w.write(40 as u16)?; // section header entry size
-    w.write(5 as u16)?; // section header entry count
-    w.write(1 as u16)?; // section names are in section 1
+    let header_size_dfr = w.write_deferred(0_u16)?;
+    w.write(0_u16)?; // no program header entries
+    w.write(0_u16)?; // no program header entries
+    w.write(40_u16)?; // section header entry size
+    w.write(5_u16)?; // section header entry count
+    w.write(1_u16)?; // section names are in section 1
 
     let pos = w.position()? as u16;
     w.resolve(header_size_dfr, pos)?;
@@ -250,18 +250,18 @@ fn write_hdr_64<'a, W: Write + Seek, E: Endian>(
     write_ident(hdr, w)?;
     w.write(ET_REL)?;
     w.write(hdr.machine)?;
-    w.write(1 as u32)?; // header version
-    w.write(0 as u64)?; // entry point (none)
-    w.write(0 as u64)?; // no program headers
+    w.write(1_u32)?; // header version
+    w.write(0_u64)?; // entry point (none)
+    w.write(0_u64)?; // no program headers
     let shoff_pos = w.position()?;
-    w.write(0 as u64)?; // placeholder for section header offset
+    w.write(0_u64)?; // placeholder for section header offset
     w.write(hdr.flags)?;
-    let header_size_dfr = w.write_deferred(0 as u16)?;
-    w.write(0 as u16)?; // no program header entries
-    w.write(0 as u16)?; // no program header entries
-    w.write(64 as u16)?; // section header entry size
-    w.write(5 as u16)?; // section header entry count
-    w.write(1 as u16)?; // section names are in section 1
+    let header_size_dfr = w.write_deferred(0_u16)?;
+    w.write(0_u16)?; // no program header entries
+    w.write(0_u16)?; // no program header entries
+    w.write(64_u16)?; // section header entry size
+    w.write(5_u16)?; // section header entry count
+    w.write(1_u16)?; // section names are in section 1
 
     let pos = w.position()? as u16;
     w.resolve(header_size_dfr, pos)?;
@@ -273,9 +273,9 @@ fn write_hdr_64<'a, W: Write + Seek, E: Endian>(
     })
 }
 
-fn write_symbol_data<'a, R: Read, W: Write + Seek, E: Endian>(
+fn write_symbol_data<R: Read, W: Write + Seek, E: Endian>(
     mut src: R,
-    w: &mut binbin::Writer<'a, W, E>,
+    w: &mut binbin::Writer<'_, W, E>,
     align: usize,
 ) -> Result<(u64, u64)> {
     let len = std::io::copy(&mut src, w)?;
@@ -285,8 +285,8 @@ fn write_symbol_data<'a, R: Read, W: Write + Seek, E: Endian>(
 
 fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
     rodata_pos: u64,
-    sym_names: &Vec<String>,
-    syms: &Vec<Symbol>,
+    sym_names: &[String],
+    syms: &[Symbol],
     w: &mut binbin::Writer<'a, W, E>,
 ) -> Result<TrailerMap> {
     // At the point we're called, our position is at the end of the
@@ -307,7 +307,7 @@ fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
     // .strtab is the table of our symbol names.
     w.align(ALIGN)?;
     let strtab_start = w.position()?;
-    w.write(0 as u8)?; // string tables always start with a null
+    w.write(0_u8)?; // string tables always start with a null
     let mut symbol_name_idx: Vec<u32> = Vec::with_capacity(syms.len());
     {
         let mut idx: usize = 1;
@@ -315,7 +315,7 @@ fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
         for name in sym_names.iter() {
             symbol_name_idx.push(idx as u32);
             w.write(name.as_bytes())?;
-            w.write(0 as u8)?; // null terminator
+            w.write(0_u8)?; // null terminator
             idx += name.len() + 1;
         }
     }
@@ -325,7 +325,7 @@ fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
     w.align(ALIGN)?;
     let symtab_start = w.position()?;
     let mut rodata_size: u64 = 0;
-    if syms.len() > 0 {
+    if !syms.is_empty() {
         // Symbol zero is a null symbol required by the ELF format
         write_symbol_32(
             w,
@@ -345,7 +345,7 @@ fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
                     name_idx: symbol_name_idx[i],
                     value: sym.rodata_offset as u32,
                     size: sym.size as u32,
-                    info: (1 << 4) | 1 as u8, // (STB_GLOBAL, STT_OBJECT)
+                    info: (1 << 4) | 1_u8, // (STB_GLOBAL, STT_OBJECT)
                     other: 0,
                     section_idx: 2, // .rodata
                 },
@@ -458,8 +458,8 @@ fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
 
 fn write_metadata_sections_64<'a, W: Write + Seek, E: Endian>(
     rodata_pos: u64,
-    sym_names: &Vec<String>,
-    syms: &Vec<Symbol>,
+    sym_names: &[String],
+    syms: &[Symbol],
     w: &mut binbin::Writer<'a, W, E>,
 ) -> Result<TrailerMap> {
     // At the point we're called, our position is at the end of the
@@ -480,7 +480,7 @@ fn write_metadata_sections_64<'a, W: Write + Seek, E: Endian>(
     // .strtab is the table of our symbol names.
     w.align(ALIGN)?;
     let strtab_start = w.position()?;
-    w.write(0 as u8)?; // string tables always start with a null
+    w.write(0_u8)?; // string tables always start with a null
     let mut symbol_name_idx: Vec<u32> = Vec::with_capacity(syms.len());
     {
         let mut idx: usize = 1;
@@ -488,7 +488,7 @@ fn write_metadata_sections_64<'a, W: Write + Seek, E: Endian>(
         for name in sym_names.iter() {
             symbol_name_idx.push(idx as u32);
             w.write(name.as_bytes())?;
-            w.write(0 as u8)?; // null terminator
+            w.write(0_u8)?; // null terminator
             idx += name.len() + 1;
         }
     }
@@ -498,7 +498,7 @@ fn write_metadata_sections_64<'a, W: Write + Seek, E: Endian>(
     w.align(ALIGN)?;
     let symtab_start = w.position()?;
     let mut rodata_size: u64 = 0;
-    if syms.len() > 0 {
+    if !syms.is_empty() {
         // Symbol zero is a null symbol required by the ELF format
         write_symbol_64(
             w,
@@ -518,7 +518,7 @@ fn write_metadata_sections_64<'a, W: Write + Seek, E: Endian>(
                     name_idx: symbol_name_idx[i],
                     value: v.rodata_offset,
                     size: v.size,
-                    info: (1 << 4) | 1 as u8, // (STB_GLOBAL, STT_OBJECT)
+                    info: (1 << 4) | 1_u8, // (STB_GLOBAL, STT_OBJECT)
                     other: 0,
                     section_idx: 2, // .rodata
                 },
@@ -629,8 +629,8 @@ fn write_metadata_sections_64<'a, W: Write + Seek, E: Endian>(
     })
 }
 
-fn write_section_header_32<'a, W: Write + Seek, E: Endian>(
-    w: &mut binbin::Writer<'a, W, E>,
+fn write_section_header_32<W: Write + Seek, E: Endian>(
+    w: &mut binbin::Writer<'_, W, E>,
     hdr: SectionHeader32,
 ) -> Result<()> {
     w.write(hdr.name_idx)?; // index into .shstrtab
@@ -646,8 +646,8 @@ fn write_section_header_32<'a, W: Write + Seek, E: Endian>(
     Ok(())
 }
 
-fn write_section_header_64<'a, W: Write + Seek, E: Endian>(
-    w: &mut binbin::Writer<'a, W, E>,
+fn write_section_header_64<W: Write + Seek, E: Endian>(
+    w: &mut binbin::Writer<'_, W, E>,
     hdr: SectionHeader64,
 ) -> Result<()> {
     w.write(hdr.name_idx)?; // index into .shstrtab
@@ -663,8 +663,8 @@ fn write_section_header_64<'a, W: Write + Seek, E: Endian>(
     Ok(())
 }
 
-fn write_symbol_32<'a, W: Write + Seek, E: Endian>(
-    w: &mut binbin::Writer<'a, W, E>,
+fn write_symbol_32<W: Write + Seek, E: Endian>(
+    w: &mut binbin::Writer<'_, W, E>,
     sym: Symbol32,
 ) -> Result<()> {
     w.write(sym.name_idx)?; // index into .strtab
@@ -676,8 +676,8 @@ fn write_symbol_32<'a, W: Write + Seek, E: Endian>(
     Ok(())
 }
 
-fn write_symbol_64<'a, W: Write + Seek, E: Endian>(
-    w: &mut binbin::Writer<'a, W, E>,
+fn write_symbol_64<W: Write + Seek, E: Endian>(
+    w: &mut binbin::Writer<'_, W, E>,
     sym: Symbol64,
 ) -> Result<()> {
     w.write(sym.name_idx)?; // index into .strtab
@@ -697,8 +697,8 @@ fn write_ident<'a, W: Write + Seek, E: Endian>(
     w.write(&b"\x7fELF"[..])?;
     w.write(hdr.class as u8)?;
     w.write(hdr.encoding as u8)?;
-    w.write(1 as u8)?; // file version 1
-    w.write(0 as u8)?; // no particular ABI
+    w.write(1_u8)?; // file version 1
+    w.write(0_u8)?; // no particular ABI
     w.skip(8)?; // unused ident bytes
     Ok(())
 }
@@ -776,7 +776,7 @@ const SHT_STRTAB: u32 = 3;
 const SHF_ALLOC: u32 = 0x2;
 const SHF_STRINGS: u32 = 0x20;
 
-const SHSTRTAB: &'static [u8] = b"\x00.shstrtab\x00.strtab\x00.symtab\x00.rodata\x00";
+const SHSTRTAB: &[u8] = b"\x00.shstrtab\x00.strtab\x00.symtab\x00.rodata\x00";
 const SHSTRTAB_SHSTRTAB: u32 = 1;
 const SHSTRTAB_STRTAB: u32 = 11;
 const SHSTRTAB_SYMTAB: u32 = 19;

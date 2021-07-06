@@ -122,8 +122,8 @@ fn parse_machine(src: &str) -> Result<u16, Error> {
         "x86" => Ok(3),
         "x86_64" => Ok(62),
         _ => {
-            if src.starts_with("0x") {
-                match u16::from_str_radix(&src[2..], 16) {
+            if let Some(digits) = src.strip_prefix("0x") {
+                match u16::from_str_radix(digits, 16) {
                     Ok(v) => Ok(v),
                     Err(_) => Err(Error::new(
                         InvalidInput,
@@ -141,8 +141,8 @@ fn parse_machine(src: &str) -> Result<u16, Error> {
 }
 
 fn parse_flags(src: &str) -> Result<u32, Error> {
-    if src.starts_with("0x") {
-        match u32::from_str_radix(&src[2..], 16) {
+    if let Some(digits) = src.strip_prefix("0x") {
+        match u32::from_str_radix(digits, 16) {
             Ok(v) => Ok(v),
             Err(_) => Err(Error::new(
                 InvalidInput,
