@@ -100,7 +100,8 @@ fn three_symbols_le32() -> Result<()> {
         Symbol {
             rodata_offset: 0,
             size: 2,
-            padded_size: 4,
+            padded_size: 2,
+            alignment: 4,
         }
     );
     assert_eq!(
@@ -108,7 +109,8 @@ fn three_symbols_le32() -> Result<()> {
         Symbol {
             rodata_offset: 4,
             size: 3,
-            padded_size: 4,
+            padded_size: 5,
+            alignment: 4,
         }
     );
     assert_eq!(
@@ -117,6 +119,7 @@ fn three_symbols_le32() -> Result<()> {
             rodata_offset: 8,
             size: 3,
             padded_size: 4,
+            alignment: 4,
         }
     );
 
@@ -245,7 +248,8 @@ fn three_symbols_le64() -> Result<()> {
         Symbol {
             rodata_offset: 0,
             size: 2,
-            padded_size: 8,
+            padded_size: 2,
+            alignment: 8,
         }
     );
     assert_eq!(
@@ -253,7 +257,8 @@ fn three_symbols_le64() -> Result<()> {
         Symbol {
             rodata_offset: 8,
             size: 3,
-            padded_size: 8,
+            padded_size: 9,
+            alignment: 8,
         }
     );
     assert_eq!(
@@ -262,6 +267,7 @@ fn three_symbols_le64() -> Result<()> {
             rodata_offset: 16,
             size: 3,
             padded_size: 8,
+            alignment: 8,
         }
     );
 

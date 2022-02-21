@@ -90,23 +90,23 @@ where
             section_header_offset_field: 0,
         };
         match hdr.encoding {
-            Encoding::LSB => binbin::write_le(&mut target, |mut w| match hdr.class {
+            Encoding::LSB => binbin::write_le(&mut target, |w| match hdr.class {
                 Class::ELF32 => {
-                    headmap = write_hdr_32(&hdr, &mut w)?;
+                    headmap = write_hdr_32(&hdr, w)?;
                     Ok(())
                 }
                 Class::ELF64 => {
-                    headmap = write_hdr_64(&hdr, &mut w)?;
+                    headmap = write_hdr_64(&hdr, w)?;
                     Ok(())
                 }
             }),
-            Encoding::MSB => binbin::write_be(&mut target, |mut w| match hdr.class {
+            Encoding::MSB => binbin::write_be(&mut target, |w| match hdr.class {
                 Class::ELF32 => {
-                    headmap = write_hdr_32(&hdr, &mut w)?;
+                    headmap = write_hdr_32(&hdr, w)?;
                     Ok(())
                 }
                 Class::ELF64 => {
-                    headmap = write_hdr_64(&hdr, &mut w)?;
+                    headmap = write_hdr_64(&hdr, w)?;
                     Ok(())
                 }
             }),
@@ -135,34 +135,66 @@ where
     /// `add_symbol` doesn't check if you define the same symbol name more than
     /// once, but doing so will create a confusing object file that may not
     /// be accepted by an ELF linker.
+    ///
+    /// This function aligns the data to the word size of the destination ELF
+    /// file. Use `add_symbol_align` instead if you need specific alignment.
     pub fn add_symbol<S: Into<String>, R: Read>(&mut self, name: S, src: R) -> Result<Symbol> {
+        let align = match self.class {
+            Class::ELF32 => 4,
+            Class::ELF64 => 8,
+        };
+        self.add_symbol_align(name, align, src)
+    }
+
+    /// Define a new symbol in the output file with a particular alignment,
+    /// using the contents of a given reader as the symbol contents.
+    ///
+    /// `add_symbol_align` will read the given reader to completion and copy
+    /// all of its data into the output file.
+    ///
+    /// `add_symbol_align` doesn't check if you define the same symbol name
+    /// more than once, but doing so will create a confusing object file that
+    /// may not be accepted by an ELF linker.
+    pub fn add_symbol_align<S: Into<String>, R: Read>(
+        &mut self,
+        name: S,
+        alignment: usize,
+        src: R,
+    ) -> Result<Symbol> {
         let offset = self.current_rodata_offset;
-        let length: u64;
-        let stride: u64;
+
+        let pad_err = offset % alignment as u64;
+        let mut skip = 0;
+        if pad_err != 0 {
+            for _ in pad_err..(alignment as u64) {
+                self.w.write_all(&b" "[..])?;
+                skip += 1;
+            }
+        }
 
         let encoding = self.encoding;
         let class = self.class;
-        let result = match encoding {
+        let length = match encoding {
             Encoding::LSB => binbin::write_le(&mut self.w, |w| match class {
-                Class::ELF32 => write_symbol_data(src, w, 4),
-                Class::ELF64 => write_symbol_data(src, w, 8),
+                Class::ELF32 => write_symbol_data(src, w),
+                Class::ELF64 => write_symbol_data(src, w),
             }),
             Encoding::MSB => binbin::write_be(&mut self.w, |w| match class {
-                Class::ELF32 => write_symbol_data(src, w, 4),
-                Class::ELF64 => write_symbol_data(src, w, 8),
+                Class::ELF32 => write_symbol_data(src, w),
+                Class::ELF64 => write_symbol_data(src, w),
             }),
         }?;
-        length = result.0;
-        stride = result.1;
+        let padded_size = length + skip;
 
         let sym = Symbol {
-            rodata_offset: offset,
+            rodata_offset: offset + skip,
             size: length,
-            padded_size: stride,
+            padded_size,
+            alignment,
         };
         self.symbols.push(sym);
         self.symbol_names.push(name.into());
-        self.current_rodata_offset += stride;
+        self.current_rodata_offset += padded_size;
         Ok(sym)
     }
 
@@ -276,11 +308,9 @@ fn write_hdr_64<'a, W: Write + Seek, E: Endian>(
 fn write_symbol_data<R: Read, W: Write + Seek, E: Endian>(
     mut src: R,
     w: &mut binbin::Writer<'_, W, E>,
-    align: usize,
-) -> Result<(u64, u64)> {
+) -> Result<u64> {
     let len = std::io::copy(&mut src, w)?;
-    let extra = w.align(align)?;
-    Ok((len, len + (extra as u64)))
+    Ok(len)
 }
 
 fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
@@ -325,6 +355,7 @@ fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
     w.align(ALIGN)?;
     let symtab_start = w.position()?;
     let mut rodata_size: u64 = 0;
+    let mut rodata_align: usize = 1;
     if !syms.is_empty() {
         // Symbol zero is a null symbol required by the ELF format
         write_symbol_32(
@@ -351,6 +382,9 @@ fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
                 },
             )?;
             rodata_size += sym.padded_size;
+            if sym.alignment > rodata_align {
+                rodata_align = sym.alignment;
+            }
         }
     }
     let symtab_len = w.position()? - symtab_start;
@@ -409,7 +443,7 @@ fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
                 size: rodata_size as u32,
                 link: 0,
                 info: 0,
-                addralign: ALIGN as u32,
+                addralign: rodata_align as u32,
                 entsize: 0,
             },
         )?;
@@ -498,6 +532,7 @@ fn write_metadata_sections_64<'a, W: Write + Seek, E: Endian>(
     w.align(ALIGN)?;
     let symtab_start = w.position()?;
     let mut rodata_size: u64 = 0;
+    let mut rodata_align: usize = 1;
     if !syms.is_empty() {
         // Symbol zero is a null symbol required by the ELF format
         write_symbol_64(
@@ -524,6 +559,9 @@ fn write_metadata_sections_64<'a, W: Write + Seek, E: Endian>(
                 },
             )?;
             rodata_size += v.padded_size;
+            if v.alignment > rodata_align {
+                rodata_align = v.alignment;
+            }
         }
     }
     let symtab_len = w.position()? - symtab_start;
@@ -582,7 +620,7 @@ fn write_metadata_sections_64<'a, W: Write + Seek, E: Endian>(
                 size: rodata_size,
                 link: 0,
                 info: 0,
-                addralign: ALIGN as u64,
+                addralign: rodata_align as u64,
                 entsize: 0,
             },
         )?;
@@ -717,6 +755,7 @@ pub struct Symbol {
     rodata_offset: u64,
     size: u64,
     padded_size: u64,
+    alignment: usize,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
