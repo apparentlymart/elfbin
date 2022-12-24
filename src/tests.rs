@@ -334,3 +334,75 @@ fn three_symbols_le64() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn different_section_name_le32() -> Result<()> {
+    let buf: Vec<u8> = Vec::new();
+    let cursor = Cursor::new(buf);
+    let mut builder = Builder::new(
+        Header {
+            class: Class::ELF32,
+            encoding: Encoding::LSB,
+            machine: 0x28,     // ARM instruction set
+            flags: 0x05000000, // ARM ABI version 5
+        },
+        cursor,
+    )?;
+    builder.set_section_name(".othername");
+    let sym_a = builder.add_symbol("A", &b"ay"[..]).unwrap();
+    assert_eq!(
+        sym_a,
+        Symbol {
+            rodata_offset: 0,
+            size: 2,
+            padded_size: 2,
+            alignment: 4,
+        }
+    );
+
+    let mut cursor = builder.close()?;
+    cursor.seek(std::io::SeekFrom::Start(0))?;
+
+    let ef = elf::File::open_stream(&mut cursor).unwrap();
+    assert_eq!(
+        ef.ehdr,
+        elf::types::FileHeader {
+            class: elf::types::ELFCLASS32,
+            data: elf::types::ELFDATA2LSB,
+            version: elf::types::Version(1),
+            osabi: elf::types::ELFOSABI_NONE,
+            abiversion: 0,
+            elftype: elf::types::ET_REL,
+            machine: elf::types::EM_ARM,
+            entry: 0,
+        }
+    );
+    assert_eq!(ef.phdrs.len(), 0, "no program headers");
+    assert_eq!(ef.sections.len(), 5, "five section headers");
+    let rodata = ef.get_section(".othername").unwrap();
+    let symtab = ef.get_section(".symtab").unwrap();
+    let syms = ef.get_symbols(symtab).unwrap();
+    assert_eq!(
+        syms.len(),
+        2,
+        "one symbol in addition to the zero placeholder"
+    );
+
+    {
+        // Placeholder symbol zero
+        assert_eq!(syms[0].name, "");
+        assert_eq!(syms[0].value, 0);
+        assert_eq!(syms[0].size, 0);
+    }
+    {
+        // Real symbol 1: A
+        assert_eq!(syms[1].name, "A");
+        assert_eq!(syms[1].value, 0);
+        assert_eq!(syms[1].size, 2);
+        let start_offset = syms[1].value as usize;
+        let end_offset = start_offset + syms[1].size as usize;
+        assert_eq!(&rodata.data[start_offset..end_offset], &b"ay"[..]);
+    }
+
+    Ok(())
+}

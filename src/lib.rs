@@ -30,7 +30,10 @@
 //! ```
 
 use binbin::endian::Endian;
-use std::io::{Read, Result, Seek, Write};
+use std::{
+    borrow::Cow,
+    io::{Read, Result, Seek, Write},
+};
 
 /// ELF file class (32-bit or 64-bit).
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -73,6 +76,7 @@ pub struct Builder<W: Write + Seek> {
     current_rodata_offset: u64,
     symbols: Vec<Symbol>,
     symbol_names: Vec<String>,
+    shstrtab: Cow<'static, [u8]>,
 }
 
 impl<W> Builder<W>
@@ -123,7 +127,25 @@ where
             current_rodata_offset: 0,
             symbols: Vec::new(),
             symbol_names: Vec::new(),
+            shstrtab: Cow::Borrowed(SHSTRTAB),
         })
+    }
+
+    pub fn set_section_name(&mut self, name: impl AsRef<str>) {
+        let name = name.as_ref();
+
+        // If the caller is customizing the section name then we'll
+        // allocate a new buffer to represent our ".shstrtab" content,
+        // instead of using the default one in SHSTRTAB. However,
+        // we will still use SHSTRTAB as the starting point because
+        // we only actually want to replace the .rodata part, which
+        // is intentionally the last part so that we can just swap
+        // it out without interfering with any offsets into this section.
+        let mut shstrtab = Vec::<u8>::with_capacity(SHSTRTAB_RODATA as usize + name.len() + 1);
+        shstrtab.extend_from_slice(&SHSTRTAB[..SHSTRTAB_RODATA as usize]);
+        shstrtab.extend_from_slice(name.as_bytes());
+        shstrtab.push(0); // null terminator
+        self.shstrtab = Cow::Owned(shstrtab);
     }
 
     /// Define a new symbol in the output file, using the contents of a given
@@ -211,15 +233,24 @@ where
         let sym_names = self.symbol_names;
         let syms = self.symbols;
         let rodata_pos = self.rodata_pos;
+        let shstrtab = &self.shstrtab;
 
         let map = match encoding {
             Encoding::LSB => binbin::write_le(&mut self.w, |w| match class {
-                Class::ELF32 => write_metadata_sections_32(rodata_pos, &sym_names, &syms, w),
-                Class::ELF64 => write_metadata_sections_64(rodata_pos, &sym_names, &syms, w),
+                Class::ELF32 => {
+                    write_metadata_sections_32(rodata_pos, &sym_names, &syms, shstrtab, w)
+                }
+                Class::ELF64 => {
+                    write_metadata_sections_64(rodata_pos, &sym_names, &syms, shstrtab, w)
+                }
             }),
             Encoding::MSB => binbin::write_be(&mut self.w, |w| match class {
-                Class::ELF32 => write_metadata_sections_32(rodata_pos, &sym_names, &syms, w),
-                Class::ELF64 => write_metadata_sections_64(rodata_pos, &sym_names, &syms, w),
+                Class::ELF32 => {
+                    write_metadata_sections_32(rodata_pos, &sym_names, &syms, shstrtab, w)
+                }
+                Class::ELF64 => {
+                    write_metadata_sections_64(rodata_pos, &sym_names, &syms, shstrtab, w)
+                }
             }),
         }?;
 
@@ -317,6 +348,7 @@ fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
     rodata_pos: u64,
     sym_names: &[String],
     syms: &[Symbol],
+    shstrtab: &[u8],
     w: &mut binbin::Writer<'a, W, E>,
 ) -> Result<TrailerMap> {
     // At the point we're called, our position is at the end of the
@@ -331,7 +363,7 @@ fn write_metadata_sections_32<'a, W: Write + Seek, E: Endian>(
     // header table below, because our ELF header points to it there.
     w.align(ALIGN)?;
     let shstrtab_start = w.position()?;
-    w.write(SHSTRTAB)?;
+    w.write(shstrtab)?;
     let shstrtab_len = w.position()? - shstrtab_start;
 
     // .strtab is the table of our symbol names.
@@ -494,6 +526,7 @@ fn write_metadata_sections_64<'a, W: Write + Seek, E: Endian>(
     rodata_pos: u64,
     sym_names: &[String],
     syms: &[Symbol],
+    shstrtab: &[u8],
     w: &mut binbin::Writer<'a, W, E>,
 ) -> Result<TrailerMap> {
     // At the point we're called, our position is at the end of the
@@ -508,7 +541,7 @@ fn write_metadata_sections_64<'a, W: Write + Seek, E: Endian>(
     // header table below, because our ELF header points to it there.
     w.align(ALIGN)?;
     let shstrtab_start = w.position()?;
-    w.write(SHSTRTAB)?;
+    w.write(shstrtab)?;
     let shstrtab_len = w.position()? - shstrtab_start;
 
     // .strtab is the table of our symbol names.

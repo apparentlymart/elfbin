@@ -20,6 +20,9 @@ fn main() -> Result<(), Error> {
         },
         of,
     )?;
+    if args.section != ".rodata" {
+        builder.set_section_name(&args.section);
+    }
 
     for sym_def in args.symbols {
         let name = sym_def.symbol_name;
@@ -47,6 +50,14 @@ pub struct CommandLine {
 
     #[structopt(long, name = "flags", help = "Machine-specific ELF flags", parse(try_from_str=parse_flags), default_value="0x00000000" )]
     pub flags: u32,
+
+    #[structopt(
+        long,
+        name = "section",
+        help = "Override section name",
+        default_value = ".rodata"
+    )]
+    pub section: String,
 
     #[structopt(name = "NAME=FILE", help = "Define a symbol")]
     pub symbols: Vec<SymbolDef>,
